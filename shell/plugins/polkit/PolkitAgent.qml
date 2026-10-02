@@ -59,6 +59,7 @@ Item {
     if (!(event.modifiers & Qt.KeypadModifier)) return false
     var digit = PolkitModel.keypadDigit(event.key)
     if (digit === "") return false
+    passwordInput.remove(passwordInput.selectionStart, passwordInput.selectionEnd)
     passwordInput.insert(passwordInput.cursorPosition, digit)
     return true
   }
