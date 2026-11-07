@@ -88,6 +88,7 @@ Panel {
   // One shared copy menu for whichever row summoned it, instead of a Popup
   // instantiated inside every machine row.
   property var copyPeer: null
+  property var copyAnchor: null
   property int copyIndex: 0
   readonly property var copyOptions: copyOptionsFor(copyPeer)
 
@@ -140,13 +141,38 @@ Panel {
     if (!copyPeer || String(copyPeer.id || "") !== String(peer.id || "")) copyIndex = 0
     copyPeer = peer
     clampCopyIndex()
-    var anchor = row || peerList
-    var point = anchor.mapToItem(peerList, 0, anchor.height)
+    copyAnchor = row || peerList
+    var point = copyAnchor.mapToItem(peerList, 0, copyAnchor.height)
     // Opens toward the row, from whichever end its copy button sits at.
-    var x = peerList.LayoutMirroring.enabled ? point.x : point.x + anchor.width - sharedCopyPopup.width
+    var x = peerList.LayoutMirroring.enabled ? point.x : point.x + copyAnchor.width - sharedCopyPopup.width
     sharedCopyPopup.x = Math.max(0, Math.min(peerList.width - sharedCopyPopup.width, x))
-    sharedCopyPopup.y = point.y + Style.space(4)
+    placeCopyPopup()
     sharedCopyPopup.open()
+  }
+
+  // The popup lives in the full-screen overlay, so nothing stops it running
+  // off the bottom of the screen when the row is near the end of the list.
+  // Open below the row when it fits, flip above it otherwise, and as a last
+  // resort pin it inside the usable screen area.
+  function placeCopyPopup() {
+    if (!sharedCopyPopup || !peerList) return
+    var anchor = copyAnchor || peerList
+    var rowTop = anchor.mapToItem(peerList, 0, 0).y
+    var rowBottom = rowTop + anchor.height
+    var spacing = Style.space(4)
+    // The option column may not be laid out yet when this runs, so size the
+    // popup from its rows rather than trusting a stale or zero height.
+    var popupHeight = Math.max(sharedCopyPopup.height, copyOptions.length * Style.space(48))
+    var listTop = peerList.mapToItem(null, 0, 0).y
+    var minY = panel.margin + (panel.barPos === "top" ? panel.barThickness + panel.gap : 0)
+    var maxY = panel.screenH - panel.margin - (panel.barPos === "bottom" ? panel.barThickness + panel.gap : 0)
+    var y = rowBottom + spacing
+    if (panel.screenH > 0 && listTop + y + popupHeight > maxY) {
+      var above = rowTop - spacing - popupHeight
+      y = listTop + above >= minY ? above : maxY - listTop - popupHeight
+      y = Math.max(minY - listTop, y)
+    }
+    sharedCopyPopup.y = y
   }
 
   function selectedPeer() {
@@ -966,6 +992,10 @@ Panel {
                   event.accepted = true
                 }
               }
+              // The option column settles after the model changes, so redo the
+              // placement once the real height is known.
+              onHeightChanged: if (visible) root.placeCopyPopup()
+              onAboutToShow: root.placeCopyPopup()
               onOpenedChanged: {
                 root.copyMenuOpen = opened
                 if (opened) {
